@@ -15,6 +15,7 @@ export default defineConfig({
       server: { entry: "server" },
     }),
     viteReact(),
+    // A configuração explícita é o que resolve o problema.
     nitro({
       preset: "vercel",
       output: {
