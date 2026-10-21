@@ -15,8 +15,6 @@ export default defineConfig({
       server: { entry: "server" },
     }),
     viteReact(),
-    nitro({
-      preset: "vercel",
-    }),
+    nitro(), // Sem preset explícito. A Vercel detecta automaticamente.
   ],
 });
