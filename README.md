@@ -25,7 +25,7 @@ Você precisará do [Node.js](https://nodejs.org/) instalado em sua máquina.
 
 ```sh
 # 1. Clone o repositório
-git clone <url-do-seu-repositorio>
+git clone https://github.com/jwelitonlima/interamed-v-2-0
 
 # 2. Entre na pasta do projeto
 cd interamed
