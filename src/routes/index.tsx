@@ -1,11 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Clock, ChevronLeft, ChevronDown } from "lucide-react";
+import { Clock, ChevronLeft, ChevronDown, Loader2 } from "lucide-react";
 import {
   MEDS, getInteraction,
   type Severity
 } from "@/lib/meds";
 import { usePersistentState } from "@/hooks/use-persistent-state";
+import { buscarMedicamentosANVISA } from "../services/anvisa"; // IMPORTANDO A API
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -45,10 +46,14 @@ const CONTEXT_DATA = {
 function Index() {
   const [step, setStep] = useState<"search" | "interactions" | "schedule">("search");
   
-  // --- PERSISTÊNCIA DE DADOS (LOCAL STORAGE) ---
+  // --- PERSISTÊNCIA DE DADOS ---
   const [query, setQuery] = usePersistentState<string>("interamed-query", "");
   const [selected, setSelected] = usePersistentState<string[]>("interamed-selected", []);
   
+  // --- ESTADOS DA API ---
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+
   // --- ESTADOS NORMAIS ---
   const [hi, setHi] = useState(0);
   const [open, setOpen] = useState<string | null>(null);
@@ -74,16 +79,53 @@ function Index() {
     setOpen(null);
   };
 
-  const suggestions = useMemo(() => {
-    const q = strip(query.trim());
-    if (!q) return [];
-    return MEDS.filter((m) => !selected.includes(m) && strip(m).includes(q)).slice(0, 6);
+  // --- BUSCA INTEGRADA COM A ANVISA (COM DEBOUNCE) ---
+  useEffect(() => {
+    const q = query.trim();
+    
+    if (!q) {
+      setSuggestions([]);
+      return;
+    }
+
+    // Busca local imediata (para responder rápido)
+    const localResults = MEDS.filter((m) => !selected.includes(m) && strip(m).includes(strip(q)));
+
+    // Se tiver menos de 3 letras, mostra só a busca local para economizar requisições
+    if (q.length < 3) {
+      setSuggestions(localResults.slice(0, 6));
+      return;
+    }
+
+    // Debounce de 500ms para a API da ANVISA
+    setIsSearching(true);
+    const timer = setTimeout(async () => {
+      const apiResults = await buscarMedicamentosANVISA(q);
+      
+      // Formata os nomes para Title Case (ex: "DIPIRONA SODICA" -> "Dipirona Sodica")
+      const apiFormatted = apiResults.map(m => {
+        const nome = m.PRINCIPIO_ATIVO || m.NOME_PRODUTO;
+        return nome.toLowerCase().replace(/\b\w/g, l => l.toUpperCase());
+      });
+
+      // Combina os resultados locais com os da API, remove duplicatas e limita a 6
+      const combined = Array.from(new Set([...localResults, ...apiFormatted]));
+      const finalSuggestions = combined.filter(m => !selected.includes(m)).slice(0, 6);
+      
+      setSuggestions(finalSuggestions);
+      setIsSearching(false);
+    }, 500);
+
+    return () => clearTimeout(timer);
   }, [query, selected]);
 
   const add = (m: string) => {
     setSelected((s) => [...s, m]);
-    setQuery(""); setHi(0); inputRef.current?.focus();
+    setQuery(""); 
+    setHi(0); 
+    inputRef.current?.focus();
   };
+  
   const remove = (m: string) => setSelected((s) => s.filter((x) => x !== m));
 
   const verify = () => { 
@@ -318,8 +360,16 @@ function Index() {
                   if (e.key === "Backspace" && !query && selected.length) remove(selected[selected.length - 1]!);
                 }}
                 placeholder="Buscar medicamento..."
-                className="w-full rounded-2xl bg-white px-6 py-5 text-xl font-medium shadow-sm outline-none transition focus:ring-2 focus:ring-black placeholder:text-gray-400"
+                className="w-full rounded-2xl bg-white px-6 py-5 pr-14 text-xl font-medium shadow-sm outline-none transition focus:ring-2 focus:ring-black placeholder:text-gray-400"
               />
+              
+              {/* Ícone de Carregamento na Barra de Busca */}
+              {isSearching && (
+                <div className="absolute right-5 top-1/2 -translate-y-1/2">
+                  <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+                </div>
+              )}
+
               {suggestions.length > 0 && (
                 <ul className="absolute z-20 mt-2 w-full overflow-hidden rounded-2xl bg-white shadow-xl border border-gray-100">
                   {suggestions.map((m, i) => (
